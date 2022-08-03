@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<title>QR Code Server</title>
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<link rel="preconnect" href="https://fonts.googleapis.com">
+		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+		<link href="https://fonts.googleapis.com/css2?family=Azeret+Mono:wght@700&family=Inter:wght@600&display=swap" rel="stylesheet">
+		<script src="https://cdn.jsdelivr.net/gh/davidshimjs/qrcodejs@gh-pages/qrcode.min.js"></script>
+		<style>
+		:root {
+			--navy: #11263B;
+			--black: #000000;
+			--white: #FFFFFF;
+		}
+
+		* {
+			font-family: "Inter", system-ui, Arial, Helvetica, sans-serif;
+		}
+
+		html, body {
+			background-color: var(--navy);
+			margin: 16px;
+			overflow: hidden;
+		}
+
+		video {
+			width: 100%;
+			height: 100%;
+		}
+
+		input[type="button"] {
+			border: none;
+			cursor: pointer;
+			font-size: large;
+			margin-top: 16px;
+			padding: 12px 24px;
+			background-color: var(--white);
+			border-radius: 8px;
+		}
+
+		select, input[type="url"], input[type="number"] {
+			width: 100%;
+			box-sizing: border-box;
+			padding: 8px;
+			min-width: 512px;
+		}
+
+		label {
+			margin-right: 16px;
+		}
+
+		#mainContainer {
+			background-color: var(--black);
+			display: none;
+			height: 100%;
+			left: 0;
+			opacity: 0;
+			position: absolute;
+			top: 0;
+			transition: 0.5s;
+			width: 100%;
+		}
+
+		#qrContainer {
+			align-items: center;
+			background-color: #000000CC;
+			display: flex;
+			height: 100%;
+			justify-content: center;
+			position: absolute;
+			transition: 0.5s;
+			width: 100%;
+		}
+
+		#qrBorder {
+			align-items: center;
+			background-color: var(--white);
+			border-radius: 8px;
+			display: flex;
+			flex-direction: column;
+			padding: 4vmin;
+		}
+
+		#countdownContainer {
+			font-size: 3.5vmin;
+			margin: 0 0 3.5vmin 0;
+		}
+
+		#countdown {
+			font-family: "Azeret Mono", monospace;
+		}
+
+		#timeContainer {
+			font-size: xx-large;
+			margin-bottom: 16px;
+		}
+
+		#timeContainer, label {
+			color: white;
+		}
+		</style>
+		<script>
+		let qrCode, startTime, videoElem, timeElem, countdownElem, videoSrcElem, fileUrlElem, qrContainer;
+		let serverSpammer = null;
+		let timeOffset = 0;
+		const requestFrame = window.requestAnimationFrame || window.webkitRequestAnimationFrame || window.mozRequestAnimationFrame || window.oRequestAnimationFrame || window.msRequestAnimationFrame || function(e) { return window.setTimeout(e, 1000 / 60); };
+
+		function setup() {
+			videoElem = document.getElementById("video");
+			timeElem = document.getElementById("currentTime");
+			countdownElem = document.getElementById("countdown");
+			videoSrcElem = document.getElementById("videoSrc");
+			fileUrlElem = document.getElementById("fileUrl");
+			qrContainer = document.getElementById("qrContainer");
+			choosePreset(document.getElementById("preset"));
+			requestFrame(updateCounters);
+			// Spam the server to get a more accurate offset
+			serverSpammer = window.setInterval(getTimeOffset, 3000);
+			getTimeOffset();
+		}
+
+		async function getTimeOffset() {
+			const request = await fetch("http://localhost:8888/offset");
+			const json = await request.json();
+			// Don't update during barcode display
+			if (serverSpammer === null) return;
+			timeOffset = json.offset;
+			document.getElementById("timeOffset").textContent = `Correction: ${timeOffset} ms`;
+		}
+
+		function choosePreset(elem) {
+			switch (elem.value) {
+				case "trailer":
+					videoSrcElem.value = "demo/trailer.mp4";
+					fileUrlElem.value = "https://bit.ly/3bENg0m";
+					break;
+				/*case "clapping":
+					videoSrcElem.value = "demo/clapping.mp4";
+					fileUrlElem.value = "https://bit.ly/3yvbnY8";
+					break;*/
+			}
+		}
+
+		function startCountdown(elem) {
+			// Stop updating time offset
+			window.clearInterval(serverSpammer);
+			serverSpammer = null;
+
+			// Set video source
+			videoElem.src = videoSrcElem.value;
+
+			// Fade in container
+			const container = document.getElementById("mainContainer");
+			container.style.display = "block";
+			window.setTimeout(() => {
+				container.style.opacity = "1";
+			}, 0);
+
+			// Start timing events
+			const delayElem = document.getElementById("delayTime");
+			const delay = parseInt(delayElem.value);
+			startTime = Date.now() + timeOffset + delay;
+
+			// Play video
+			window.setTimeout(() => {
+				videoElem.play();
+				qrContainer.style.display = "none";
+			}, delay);
+
+			// Fade out QR code with CSS transition
+			window.setTimeout(() => {
+				qrContainer.style.opacity = "0";
+			}, delay - 500);
+
+			qrCode = new QRCode(document.getElementById("qrDisplay"), {
+				text: JSON.stringify({ // Could be shortened to `${fileUrlElem.value} ${startTime}`
+					u: fileUrlElem.value,
+					s: startTime
+				}),
+				width: window.innerHeight * 0.8,
+				height: window.innerHeight * 0.8,
+				colorDark: "black",
+				colorLight: "white",
+				correctLevel: QRCode.CorrectLevel.L // Lowest error correction, makes smallest possible code
+			});
+		}
+
+		function padTime(num, size) {
+			return ("000" + num).slice(-size);
+		}
+
+		function niceTime(milli) {
+			const millis = milli % 1000;
+			const seconds = Math.floor((milli / 1000) % 60);
+			const minutes = Math.floor((milli / 60000) % 60);
+			return `${padTime(minutes, 2)}:${padTime(seconds, 2)}.${padTime(millis, 3)}`;
+		}
+
+		function updateCounters() {
+			const utcTime = Date.now() + timeOffset;
+			// Display current UTC time
+			timeElem.textContent = `Time: ${utcTime} ms`;
+			// Display film countdown timer
+			if (startTime) {
+				countdownElem.textContent = niceTime(Math.max(0, startTime - utcTime));
+			}
+			requestFrame(updateCounters);
+		}
+		</script>
+	</head>
+	<body onload="setup();">
+		<div id="timeContainer">
+			<div id="currentTime">Time: Loading...</div>
+			<div id="timeOffset">Correction: Loading...</div>
+		</div>
+		<table>
+			<tbody>
+				<tr>
+					<td>
+						<label for="preset">Preset</label>
+					</td>
+					<td>
+						<select id="preset" onchange="choosePreset(this);">
+							<option value="trailer" selected>Trailer</option>
+							<!--<option value="clapping">Clapping</option>-->
+						</select>
+					</td>
+				</tr>
+				<tr>
+					<td>
+						<label for="videoSrc">Video Source</label>
+					</td>
+					<td>
+						<input id="videoSrc" type="url">
+					</td>
+				</tr>
+				<tr>
+					<td>
+						<label for="fileUrl">File URL</label>
+					</td>
+					<td>
+						<input id="fileUrl" type="url">
+					</td>
+				</tr>
+				<tr>
+					<td>
+						<label for="delayTime">Delay until film starts (milliseconds)</label>
+					</td>
+					<td>
+						<input id="delayTime" type="number" value="10000">
+					</td>
+				</tr>
+			</tbody>
+		</table>
+		<input type="button" value="Generate QR code" onclick="startCountdown(this);">
+		<div id="mainContainer">
+			<div id="qrContainer">
+				<div id="qrBorder">
+					<span id="countdownContainer">
+						Film starting in <span id="countdown"></span>
+					</span>
+					<div id="qrDisplay"></div>
+				</div>
+			</div>
+			<video id="video"></video>
+		</div>
+	</body>
+</html>
