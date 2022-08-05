@@ -25,9 +25,11 @@
 			overflow: hidden;
 		}
 
-		video {
+		#video {
 			width: 100%;
 			height: 100%;
+			pointer-events: none;
+			user-select: none;
 		}
 
 		input[type="button"] {
@@ -102,16 +104,15 @@
 		}
 		</style>
 		<script>
-		let qrCode, startTime, videoElem, timeElem, countdownElem, videoSrcElem, fileUrlElem, qrContainer;
+		let qrCode, startTime, timeElem, countdownElem, videoIdElem, fileUrlElem, qrContainer, player;
 		let serverSpammer = null;
 		let timeOffset = 0;
 		const requestFrame = window.requestAnimationFrame || window.webkitRequestAnimationFrame || window.mozRequestAnimationFrame || window.oRequestAnimationFrame || window.msRequestAnimationFrame || function(e) { return window.setTimeout(e, 1000 / 60); };
 
 		function setup() {
-			videoElem = document.getElementById("video");
 			timeElem = document.getElementById("currentTime");
 			countdownElem = document.getElementById("countdown");
-			videoSrcElem = document.getElementById("videoSrc");
+			videoIdElem = document.getElementById("videoId");
 			fileUrlElem = document.getElementById("fileUrl");
 			qrContainer = document.getElementById("qrContainer");
 			choosePreset(document.getElementById("preset"));
@@ -119,6 +120,18 @@
 			// Spam the server to get a more accurate offset
 			serverSpammer = window.setInterval(getTimeOffset, 3000);
 			getTimeOffset();
+		}
+
+		function onYouTubeIframeAPIReady() {
+			player = new YT.Player("video", {
+				playerVars: {
+					controls: 0,
+					disablekb: 1,
+					fs: 0,
+					modestbranding: 1,
+					playsinline: 1
+				}
+			});
 		}
 
 		async function getTimeOffset() {
@@ -133,13 +146,13 @@
 		function choosePreset(elem) {
 			switch (elem.value) {
 				case "trailer":
-					videoSrcElem.value = "demo/trailer.mp4";
-					fileUrlElem.value = "https://bit.ly/3bENg0m";
+					videoIdElem.value = "ZS46gMyK5Xw";
+					fileUrlElem.value = "https://cinemasense.github.io/server/demo/trailer.csf";
 					break;
-				/*case "clapping":
-					videoSrcElem.value = "demo/clapping.mp4";
-					fileUrlElem.value = "https://bit.ly/3yvbnY8";
-					break;*/
+				case "clapping":
+					videoIdElem.value = "pP1IJH87uUc";
+					fileUrlElem.value = "https://cinemasense.github.io/server/demo/clapping.csf";
+					break;
 			}
 		}
 
@@ -149,7 +162,8 @@
 			serverSpammer = null;
 
 			// Set video source
-			videoElem.src = videoSrcElem.value;
+			player.loadVideoById(videoIdElem.value);
+			player.pauseVideo();
 
 			// Fade in container
 			const container = document.getElementById("mainContainer");
@@ -165,7 +179,7 @@
 
 			// Play video
 			window.setTimeout(() => {
-				videoElem.play();
+				player.playVideo();
 				qrContainer.style.display = "none";
 			}, delay);
 
@@ -209,6 +223,7 @@
 			requestFrame(updateCounters);
 		}
 		</script>
+		<script src="https://www.youtube.com/player_api"></script>
 	</head>
 	<body onload="setup();">
 		<div id="timeContainer">
@@ -224,16 +239,16 @@
 					<td>
 						<select id="preset" onchange="choosePreset(this);">
 							<option value="trailer" selected>Trailer</option>
-							<!--<option value="clapping">Clapping</option>-->
+							<option value="clapping">Clapping</option>
 						</select>
 					</td>
 				</tr>
 				<tr>
 					<td>
-						<label for="videoSrc">Video Source</label>
+						<label for="videoId">YouTube Video ID</label>
 					</td>
 					<td>
-						<input id="videoSrc" type="url">
+						<input id="videoId" type="url">
 					</td>
 				</tr>
 				<tr>
@@ -264,7 +279,7 @@
 					<div id="qrDisplay"></div>
 				</div>
 			</div>
-			<video id="video"></video>
+			<div id="video"></div>
 		</div>
 	</body>
 </html>
