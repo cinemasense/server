@@ -21,8 +21,38 @@
 
 		html, body {
 			background-color: var(--navy);
-			margin: 16px;
+			margin: 0;
 			overflow: hidden;
+			padding: 0;
+		}
+
+		table {
+			display: inline-block;
+			text-align: left;
+		}
+
+		#loading {
+			align-items: center;
+			background-color: #000000CC;
+			color: white;
+			display: flex;
+			font-size: xx-large;
+			height: 100%;
+			justify-content: center;
+			left: 0;
+			position: fixed;
+			text-align: center;
+			top: 0;
+			white-space: pre-wrap;
+			width: 100%;
+		}
+
+		#controls {
+			text-align: center;
+		}
+
+		#controls > * {
+			margin: 16px 0;
 		}
 
 		#video {
@@ -36,7 +66,6 @@
 			border: none;
 			cursor: pointer;
 			font-size: large;
-			margin-top: 16px;
 			padding: 12px 24px;
 			background-color: var(--white);
 			border-radius: 8px;
@@ -50,6 +79,7 @@
 		}
 
 		label {
+			color: white;
 			margin-right: 16px;
 		}
 
@@ -93,33 +123,32 @@
 		#countdown {
 			font-family: "Azeret Mono", monospace;
 		}
-
-		#timeContainer {
-			font-size: xx-large;
-			margin-bottom: 16px;
-		}
-
-		#timeContainer, label {
-			color: white;
-		}
 		</style>
 		<script>
-		let qrCode, startTime, timeElem, countdownElem, videoIdElem, fileUrlElem, qrContainer, player;
+		let qrCode, startTime, countdownElem, videoIdElem, fileUrlElem, qrContainer, player, qrDisplay, delayElem;
 		let serverSpammer = null;
 		let timeOffset = 0;
 		const requestFrame = window.requestAnimationFrame || window.webkitRequestAnimationFrame || window.mozRequestAnimationFrame || window.oRequestAnimationFrame || window.msRequestAnimationFrame || function(e) { return window.setTimeout(e, 1000 / 60); };
 
 		function setup() {
-			timeElem = document.getElementById("currentTime");
 			countdownElem = document.getElementById("countdown");
 			videoIdElem = document.getElementById("videoId");
 			fileUrlElem = document.getElementById("fileUrl");
 			qrContainer = document.getElementById("qrContainer");
+			qrDisplay = document.getElementById("qrDisplay");
+			delayElem = document.getElementById("delayTime");
 			choosePreset(document.getElementById("preset"));
-			requestFrame(updateCounters);
-			// Spam the server to get a more accurate offset
+			loadYouTubeAPI();
+			// Spam the local server to get a more accurate offset
 			serverSpammer = window.setInterval(getTimeOffset, 3000);
 			getTimeOffset();
+		}
+
+		function loadYouTubeAPI() {
+			const tag = document.createElement("script");
+			tag.src = "https://www.youtube.com/iframe_api";
+			const firstScriptTag = document.getElementsByTagName("script")[0];
+			firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
 		}
 
 		function onYouTubeIframeAPIReady() {
@@ -130,17 +159,29 @@
 					fs: 0,
 					modestbranding: 1,
 					playsinline: 1
+				},
+				events: {
+					"onReady": onPlayerReady
 				}
 			});
 		}
 
-		async function getTimeOffset() {
-			const request = await fetch("http://localhost:8888/offset");
-			const json = await request.json();
+		function onPlayerReady() {
+			document.getElementById("hostButton").disabled = false;
+		}
+
+		function getTimeOffset() {
 			// Don't update during barcode display
 			if (serverSpammer === null) return;
-			timeOffset = json.offset;
-			document.getElementById("timeOffset").textContent = `Correction: ${timeOffset} ms`;
+
+			const loadingElem = document.getElementById("loading");
+			fetch("http://localhost:8888/offset").then(async(request) => {
+				const json = await request.json();
+				timeOffset = json.offset;
+				loadingElem.style.display = "none";
+			}).catch(err => {
+				loadingElem.textContent = `Error loading time correction: ${err.message}\n\nMake sure the server is hosted correctly.`;
+			});
 		}
 
 		function choosePreset(elem) {
@@ -156,7 +197,29 @@
 			}
 		}
 
-		function startCountdown(elem) {
+		function makeQR() {
+			// Calculate timing
+			const delay = parseInt(delayElem.value);
+			startTime = Date.now() + timeOffset + delay;
+
+			// Generate QR code
+			qrDisplay.innerHTML = "";
+			qrCode = new QRCode(qrDisplay, {
+				text: JSON.stringify({ // Could be shortened to `${fileUrlElem.value} ${startTime}`
+					u: fileUrlElem.value,
+					s: startTime
+				}),
+				width: window.innerHeight * 0.8,
+				height: window.innerHeight * 0.8,
+				colorDark: "black",
+				colorLight: "white",
+				correctLevel: QRCode.CorrectLevel.L // Lowest error correction, makes smallest possible code
+			});
+
+			return delay;
+		}
+
+		function startCountdown() {
 			// Stop updating time offset
 			window.clearInterval(serverSpammer);
 			serverSpammer = null;
@@ -172,10 +235,7 @@
 				container.style.opacity = "1";
 			}, 0);
 
-			// Start timing events
-			const delayElem = document.getElementById("delayTime");
-			const delay = parseInt(delayElem.value);
-			startTime = Date.now() + timeOffset + delay;
+			const delay = makeQR();
 
 			// Play video
 			window.setTimeout(() => {
@@ -188,17 +248,15 @@
 				qrContainer.style.opacity = "0";
 			}, delay - 500);
 
-			qrCode = new QRCode(document.getElementById("qrDisplay"), {
-				text: JSON.stringify({ // Could be shortened to `${fileUrlElem.value} ${startTime}`
-					u: fileUrlElem.value,
-					s: startTime
-				}),
-				width: window.innerHeight * 0.8,
-				height: window.innerHeight * 0.8,
-				colorDark: "black",
-				colorLight: "white",
-				correctLevel: QRCode.CorrectLevel.L // Lowest error correction, makes smallest possible code
-			});
+			requestFrame(updateCounters);
+		}
+
+		function downloadQR() {
+			makeQR();
+			const link = document.createElement("a");
+			link.download = "filename.png";
+			link.href = qrCode._oDrawing._elCanvas.toDataURL("image/png");
+			link.click();
 		}
 
 		function padTime(num, size) {
@@ -214,8 +272,6 @@
 
 		function updateCounters() {
 			const utcTime = Date.now() + timeOffset;
-			// Display current UTC time
-			timeElem.textContent = `Time: ${utcTime} ms`;
 			// Display film countdown timer
 			if (startTime) {
 				countdownElem.textContent = niceTime(Math.max(0, startTime - utcTime));
@@ -223,53 +279,57 @@
 			requestFrame(updateCounters);
 		}
 		</script>
-		<script src="https://www.youtube.com/player_api"></script>
 	</head>
 	<body onload="setup();">
-		<div id="timeContainer">
-			<div id="currentTime">Time: Loading...</div>
-			<div id="timeOffset">Correction: Loading...</div>
+		<div id="loading">Loading time correction...</div>
+		<div id="controls">
+			<div>
+				<img src="brickstudios.png" height="128">
+			</div>
+			<table>
+				<tbody>
+					<tr>
+						<td>
+							<label for="preset">Preset</label>
+						</td>
+						<td>
+							<select id="preset" onchange="choosePreset(this);">
+								<option value="trailer" selected>Trailer</option>
+								<option value="clapping">Clapping</option>
+							</select>
+						</td>
+					</tr>
+					<tr>
+						<td>
+							<label for="videoId">YouTube Video ID</label>
+						</td>
+						<td>
+							<input id="videoId" type="url">
+						</td>
+					</tr>
+					<tr>
+						<td>
+							<label for="fileUrl">File URL</label>
+						</td>
+						<td>
+							<input id="fileUrl" type="url">
+						</td>
+					</tr>
+					<tr>
+						<td>
+							<label for="delayTime">Delay until film starts (milliseconds)</label>
+						</td>
+						<td>
+							<input id="delayTime" type="number" value="10000">
+						</td>
+					</tr>
+				</tbody>
+			</table>
+			<div>
+				<input type="button" id="hostButton" value="Host film" onclick="startCountdown();" disabled>
+				<input type="button" value="Download QR code" onclick="downloadQR();">
+			</div>
 		</div>
-		<table>
-			<tbody>
-				<tr>
-					<td>
-						<label for="preset">Preset</label>
-					</td>
-					<td>
-						<select id="preset" onchange="choosePreset(this);">
-							<option value="trailer" selected>Trailer</option>
-							<option value="clapping">Clapping</option>
-						</select>
-					</td>
-				</tr>
-				<tr>
-					<td>
-						<label for="videoId">YouTube Video ID</label>
-					</td>
-					<td>
-						<input id="videoId" type="url">
-					</td>
-				</tr>
-				<tr>
-					<td>
-						<label for="fileUrl">File URL</label>
-					</td>
-					<td>
-						<input id="fileUrl" type="url">
-					</td>
-				</tr>
-				<tr>
-					<td>
-						<label for="delayTime">Delay until film starts (milliseconds)</label>
-					</td>
-					<td>
-						<input id="delayTime" type="number" value="10000">
-					</td>
-				</tr>
-			</tbody>
-		</table>
-		<input type="button" value="Generate QR code" onclick="startCountdown(this);">
 		<div id="mainContainer">
 			<div id="qrContainer">
 				<div id="qrBorder">
