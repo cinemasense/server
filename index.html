@@ -2,7 +2,7 @@
 <html lang="en">
 	<head>
 		<meta charset="utf-8">
-		<title>QR Code Server</title>
+		<title>Cinema Sense Server</title>
 		<meta name="viewport" content="width=device-width, initial-scale=1">
 		<link rel="preconnect" href="https://fonts.googleapis.com">
 		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -125,49 +125,23 @@
 		}
 		</style>
 		<script>
-		let qrCode, startTime, countdownElem, videoIdElem, fileUrlElem, qrContainer, player, qrDisplay, delayElem;
+		let qrCode, startTime, countdownElem, videoPathElem, fileUrlElem, qrContainer, qrDisplay, delayElem, videoElem;
 		let serverSpammer = null;
 		let timeOffset = 0;
 		const requestFrame = window.requestAnimationFrame || window.webkitRequestAnimationFrame || window.mozRequestAnimationFrame || window.oRequestAnimationFrame || window.msRequestAnimationFrame || function(e) { return window.setTimeout(e, 1000 / 60); };
 
 		function setup() {
 			countdownElem = document.getElementById("countdown");
-			videoIdElem = document.getElementById("videoId");
+			videoPathElem = document.getElementById("videoPath");
 			fileUrlElem = document.getElementById("fileUrl");
 			qrContainer = document.getElementById("qrContainer");
 			qrDisplay = document.getElementById("qrDisplay");
 			delayElem = document.getElementById("delayTime");
+			videoElem = document.getElementById("video");
 			choosePreset(document.getElementById("preset"));
-			loadYouTubeAPI();
 			// Spam the local server to get a more accurate offset
 			serverSpammer = window.setInterval(getTimeOffset, 3000);
 			getTimeOffset();
-		}
-
-		function loadYouTubeAPI() {
-			const tag = document.createElement("script");
-			tag.src = "https://www.youtube.com/iframe_api";
-			const firstScriptTag = document.getElementsByTagName("script")[0];
-			firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
-		}
-
-		function onYouTubeIframeAPIReady() {
-			player = new YT.Player("video", {
-				playerVars: {
-					controls: 0,
-					disablekb: 1,
-					fs: 0,
-					modestbranding: 1,
-					playsinline: 1
-				},
-				events: {
-					"onReady": onPlayerReady
-				}
-			});
-		}
-
-		function onPlayerReady() {
-			document.getElementById("hostButton").disabled = false;
 		}
 
 		function getTimeOffset() {
@@ -187,11 +161,11 @@
 		function choosePreset(elem) {
 			switch (elem.value) {
 				case "trailer":
-					videoIdElem.value = "ZS46gMyK5Xw";
+					videoPathElem.value = "demo/trailer.mp4";
 					fileUrlElem.value = "https://cinemasense.github.io/server/demo/trailer.csf";
 					break;
 				case "clapping":
-					videoIdElem.value = "pP1IJH87uUc";
+					videoPathElem.value = "demo/clapping.mp4";
 					fileUrlElem.value = "https://cinemasense.github.io/server/demo/clapping.csf";
 					break;
 			}
@@ -225,8 +199,7 @@
 			serverSpammer = null;
 
 			// Set video source
-			player.loadVideoById(videoIdElem.value);
-			player.pauseVideo();
+			video.src = videoPathElem.value;
 
 			// Fade in container
 			const container = document.getElementById("mainContainer");
@@ -239,7 +212,7 @@
 
 			// Play video
 			window.setTimeout(() => {
-				player.playVideo();
+				video.play();
 				qrContainer.style.display = "none";
 			}, delay);
 
@@ -301,10 +274,10 @@
 					</tr>
 					<tr>
 						<td>
-							<label for="videoId">YouTube Video ID</label>
+							<label for="videoPath">Video Path</label>
 						</td>
 						<td>
-							<input id="videoId" type="url">
+							<input id="videoPath" type="url">
 						</td>
 					</tr>
 					<tr>
@@ -326,7 +299,7 @@
 				</tbody>
 			</table>
 			<div>
-				<input type="button" id="hostButton" value="Host film" onclick="startCountdown();" disabled>
+				<input type="button" id="hostButton" value="Host film" onclick="startCountdown();">
 				<input type="button" value="Download QR code" onclick="downloadQR();">
 			</div>
 		</div>
@@ -339,7 +312,7 @@
 					<div id="qrDisplay"></div>
 				</div>
 			</div>
-			<div id="video"></div>
+			<video id="video"></video>
 		</div>
 	</body>
 </html>
