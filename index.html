@@ -148,7 +148,6 @@
 		function getTimeOffset() {
 			// Don't update during barcode display
 			if (serverSpammer === null) return;
-
 			const loadingElem = document.getElementById("loading");
 			fetch("http://localhost:8888/offset").then(async(request) => {
 				const json = await request.json();
@@ -168,6 +167,10 @@
 				case "clapping":
 					videoPathElem.value = "demo/clapping.mp4";
 					fileUrlElem.value = "https://cinemasense.github.io/server/demo/clapping.csf";
+					break;
+				case "flume":
+					videoPathElem.value = "demo/flume.mp4";
+					fileUrlElem.value = "https://cinemasense.github.io/server/demo/flume.csf";
 					break;
 			}
 		}
@@ -292,6 +295,7 @@
 							<select id="preset" onchange="choosePreset(this);">
 								<option value="trailer" selected>Trailer</option>
 								<option value="clapping">Clapping</option>
+								<option value="flume">Flume</option>
 							</select>
 						</td>
 					</tr>
