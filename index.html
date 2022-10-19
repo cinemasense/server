@@ -128,6 +128,7 @@
 		let qrCode, startTime, countdownElem, videoPathElem, fileUrlElem, qrContainer, qrDisplay, delayElem, videoElem, mainContainer;
 		let serverSpammer = null;
 		let timeOffset = 0;
+		let playLag = 0;
 		const requestFrame = window.requestAnimationFrame || window.webkitRequestAnimationFrame || window.mozRequestAnimationFrame || window.oRequestAnimationFrame || window.msRequestAnimationFrame || function(e) { return window.setTimeout(e, 1000 / 60); };
 
 		function setup() {
@@ -206,9 +207,7 @@
 
 			videoElem.addEventListener("ended", function() {
 				const delay = makeQR(window.innerHeight * 0.5);
-				window.setTimeout(() => {
-					videoElem.play();
-				}, delay);
+				window.setTimeout(() => videoElem.play(), delay - playLag);
 			});
 		}
 
@@ -224,36 +223,54 @@
 			// Set video source
 			videoElem.src = videoPathElem.value;
 
+			// Hacky: Preload the video for Safari
+			videoElem.muted = true;
+			videoElem.play().then(() => {
+				videoElem.pause();
+				videoElem.currentTime = 0;
+			});
+
 			// Fade in container
 			mainContainer.style.display = "block";
-			window.setTimeout(() => {
-				mainContainer.style.opacity = "1";
-			}, 0);
+			window.setTimeout(() => mainContainer.style.opacity = "1", 0);
 
+			// Generate QR code and get server delay
 			const delay = makeQR(window.innerHeight * (tradeShow ? 0.5 : 0.8));
 
-			// Play video
+			// Hacky: Measure how long videoElem.play() takes to run
 			window.setTimeout(() => {
 				videoElem.play();
-				if (!tradeShow) {
-					qrContainer.style.display = "none";
-				}
-			}, delay);
+				
+				window.setTimeout(() => {
+					// Ideally currentTime would be 1 a second after calling play()
+					playLag = Math.max(0, 1000 - videoElem.currentTime * 1000);
+					videoElem.pause();
+					videoElem.currentTime = 0;
+					videoElem.muted = false;
+
+					// Subtract lag before calling play()
+					window.setTimeout(() => videoElem.play(), delay - playLag - 3000);
+				}, 1000);
+			}, 2000);
 
 			// Fade out QR code with CSS transition
 			if (!tradeShow) {
 				window.setTimeout(() => {
 					qrContainer.style.opacity = "0";
 				}, delay - 500);
+
+				window.setTimeout(() => {
+					qrContainer.style.display = "none";
+				}, delay);
 			}
 
 			requestFrame(updateCounters);
 		}
 
 		function downloadQR() {
-			makeQR();
+			makeQR(512);
 			const link = document.createElement("a");
-			link.download = "filename.png";
+			link.download = "QRCode.png";
 			link.href = qrCode._oDrawing._elCanvas.toDataURL("image/png");
 			link.click();
 		}
@@ -320,7 +337,7 @@
 							<label for="delayTime">Delay until film starts (milliseconds)</label>
 						</td>
 						<td>
-							<input id="delayTime" type="number" value="10000">
+							<input id="delayTime" type="number" min="5000" value="10000">
 						</td>
 					</tr>
 				</tbody>
