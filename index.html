@@ -337,7 +337,7 @@
 			requestFrame(updateCounters);
 		}
 
-		function toggleTradeShowUI() {
+		function tradeShowUI() {
 			const elems = document.getElementsByClassName("tradeShow");
 			for (let i = 0; i < elems.length; i++) {
 				elems[i].style.display = "revert";
@@ -349,7 +349,7 @@
 		<div id="loading">Loading time correction...</div>
 		<div id="controls">
 			<div>
-				<img src="brickstudios.png" height="128" onclick="toggleTradeShowUI();">
+				<img src="brickstudios.png" height="128" onclick="tradeShowUI();">
 			</div>
 			<table>
 				<tbody>
