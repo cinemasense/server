@@ -71,7 +71,7 @@
 			border-radius: 8px;
 		}
 
-		select, input[type="url"], input[type="number"], input[type="datetime-local"] {
+		select, input[type="url"], input[type="number"], input[type="time"] {
 			width: 100%;
 			box-sizing: border-box;
 			padding: 8px;
@@ -141,13 +141,6 @@
 		let playLag = 0;
 		const requestFrame = window.requestAnimationFrame || window.webkitRequestAnimationFrame || window.mozRequestAnimationFrame || window.oRequestAnimationFrame || window.msRequestAnimationFrame || function(e) { return window.setTimeout(e, 1000 / 60); };
 
-		function localizedDate() {
-			const now = new Date();
-			now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-			now.setMilliseconds(0);
-			return now;
-		}
-
 		function setup() {
 			countdownElem = document.getElementById("countdown");
 			videoPathElem = document.getElementById("videoPath");
@@ -158,14 +151,10 @@
 			videoElem = document.getElementById("video");
 			startTimeElem = document.getElementById("startTime");
 
-			const localDate = localizedDate();
-
-			// Cannot play films before current time
-			startTimeElem.min = localDate.toISOString().slice(0, -1);
-
 			// Set to current time plus 20 seconds
-			localDate.setSeconds(localDate.getSeconds() + 20);
-			startTimeElem.value = localDate.toISOString().slice(0, -1);
+			const now = new Date();
+			now.setSeconds(now.getSeconds() + 20);
+			startTimeElem.value = now.toLocaleTimeString("en-GB");
 
 			// Spam the local server to get a more accurate offset
 			serverSpammer = window.setInterval(getTimeOffset, 3000);
@@ -203,9 +192,21 @@
 			}
 		}
 
+		function timeToUTC(time) {
+			const parts = time.split(":");
+			const now = new Date();
+			const millis = now.setHours(parts[0], parts[1], parts[2]);
+			// Add a day if the time should be tomorrow
+			if (millis - Date.now() < 0) {
+				return now.setDate(now.getDate() + 1);
+			} else {
+				return millis;
+			}
+		}
+
 		function makeQR(qrSize) {
 			// Calculate timing
-			startTime = new Date(startTimeElem.value).getTime();
+			startTime = timeToUTC(startTimeElem.value);
 
 			// Generate QR code
 			qrDisplay.innerHTML = "";
@@ -238,7 +239,10 @@
 		}
 
 		function checkTime(elem) {
-			const pastTime = new Date(elem.value) - Date.now() < 0;
+			const parts = elem.value.split(":");
+			const now = new Date();
+			const millis = now.setHours(parts[0], parts[1], parts[2]);
+			const pastTime = millis - Date.now() < 0;
 			document.getElementById("warning").style.display = pastTime ? "block" : "none";
 		}
 
@@ -280,7 +284,7 @@
 					videoElem.muted = false;
 
 					const playTime = delay - 3000;
-					if (playTime <= 0) {
+					if (playTime < 0) {
 						// We're late, skip the start of the video
 						videoElem.currentTime = Math.max(0, (playLag - playTime) / 1000);
 						videoElem.play();
@@ -375,8 +379,8 @@
 							<label for="startTime">Film Start Time</label>
 						</td>
 						<td>
-							<input id="startTime" type="datetime-local" oninput="checkTime(this);">
-							<span id="warning">Warning: Start time is in the past!</span>
+							<input id="startTime" type="time" step="1" oninput="checkTime(this);">
+							<span id="warning">Warning: Start time is in the past, 24 hours will be added</span>
 						</td>
 					</tr>
 				</tbody>
