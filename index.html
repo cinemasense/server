@@ -71,7 +71,7 @@
 			border-radius: 8px;
 		}
 
-		select, input[type="url"], input[type="number"] {
+		select, input[type="url"], input[type="number"], input[type="datetime-local"] {
 			width: 100%;
 			box-sizing: border-box;
 			padding: 8px;
@@ -123,13 +123,30 @@
 		#countdown {
 			font-family: "Azeret Mono", monospace;
 		}
+
+		.tradeShow {
+			display: none;
+		}
+
+		#warning {
+			color: red;
+			display: none;
+			position: absolute;
+		}
 		</style>
 		<script>
-		let qrCode, startTime, countdownElem, videoPathElem, fileUrlElem, qrContainer, qrDisplay, delayElem, videoElem, mainContainer;
+		let qrCode, startTime, countdownElem, videoPathElem, fileUrlElem, qrContainer, qrDisplay, startTimeElem, videoElem, mainContainer;
 		let serverSpammer = null;
 		let timeOffset = 0;
 		let playLag = 0;
 		const requestFrame = window.requestAnimationFrame || window.webkitRequestAnimationFrame || window.mozRequestAnimationFrame || window.oRequestAnimationFrame || window.msRequestAnimationFrame || function(e) { return window.setTimeout(e, 1000 / 60); };
+
+		function localizedDate() {
+			const now = new Date();
+			now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+			now.setMilliseconds(0);
+			return now;
+		}
 
 		function setup() {
 			countdownElem = document.getElementById("countdown");
@@ -138,9 +155,18 @@
 			mainContainer = document.getElementById("mainContainer");
 			qrContainer = document.getElementById("qrContainer");
 			qrDisplay = document.getElementById("qrDisplay");
-			delayElem = document.getElementById("delayTime");
 			videoElem = document.getElementById("video");
-			choosePreset(document.getElementById("preset"));
+			startTimeElem = document.getElementById("startTime");
+
+			const localDate = localizedDate();
+
+			// Cannot play films before current time
+			startTimeElem.min = localDate.toISOString().slice(0, -1);
+
+			// Set to current time plus 20 seconds
+			localDate.setSeconds(localDate.getSeconds() + 20);
+			startTimeElem.value = localDate.toISOString().slice(0, -1);
+
 			// Spam the local server to get a more accurate offset
 			serverSpammer = window.setInterval(getTimeOffset, 3000);
 			getTimeOffset();
@@ -149,6 +175,7 @@
 		function getTimeOffset() {
 			// Don't update during barcode display
 			if (serverSpammer === null) return;
+
 			const loadingElem = document.getElementById("loading");
 			fetch("http://localhost:8888/offset").then(async(request) => {
 				const json = await request.json();
@@ -178,8 +205,7 @@
 
 		function makeQR(qrSize) {
 			// Calculate timing
-			const delay = parseInt(delayElem.value);
-			startTime = Date.now() + timeOffset + delay;
+			startTime = new Date(startTimeElem.value).getTime();
 
 			// Generate QR code
 			qrDisplay.innerHTML = "";
@@ -195,7 +221,7 @@
 				correctLevel: QRCode.CorrectLevel.L // Lowest error correction, makes smallest possible code
 			});
 
-			return delay;
+			return startTime - Date.now() - timeOffset;
 		}
 
 		function setupTradeShow() {
@@ -209,6 +235,11 @@
 				const delay = makeQR(window.innerHeight * 0.5);
 				window.setTimeout(() => videoElem.play(), delay - playLag);
 			});
+		}
+
+		function checkTime(elem) {
+			const pastTime = new Date(elem.value) - Date.now() < 0;
+			document.getElementById("warning").style.display = pastTime ? "block" : "none";
 		}
 
 		function startCountdown(tradeShow) {
@@ -248,8 +279,15 @@
 					videoElem.currentTime = 0;
 					videoElem.muted = false;
 
-					// Subtract lag before calling play()
-					window.setTimeout(() => videoElem.play(), delay - playLag - 3000);
+					const playTime = delay - 3000;
+					if (playTime <= 0) {
+						// We're late, skip the start of the video
+						videoElem.currentTime = Math.max(0, (playLag - playTime) / 1000);
+						videoElem.play();
+					} else {
+						// Subtract playback lag before calling play()
+						window.setTimeout(() => videoElem.play(), playTime - playLag);
+					}
 				}, 1000);
 			}, 2000);
 
@@ -279,7 +317,7 @@
 			return ("000" + num).slice(-size);
 		}
 
-		function niceTime(milli) {
+		function formatTime(milli) {
 			const millis = milli % 1000;
 			const seconds = Math.floor((milli / 1000) % 60);
 			const minutes = Math.floor((milli / 60000) % 60);
@@ -290,7 +328,7 @@
 			const utcTime = Date.now() + timeOffset;
 			// Display film countdown timer
 			if (startTime) {
-				countdownElem.textContent = niceTime(Math.max(0, startTime - utcTime));
+				countdownElem.textContent = formatTime(Math.max(0, startTime - utcTime));
 			}
 			requestFrame(updateCounters);
 		}
@@ -304,7 +342,7 @@
 			</div>
 			<table>
 				<tbody>
-					<tr>
+					<tr class="tradeShow">
 						<td>
 							<label for="preset">Preset</label>
 						</td>
@@ -318,26 +356,27 @@
 					</tr>
 					<tr>
 						<td>
-							<label for="videoPath">Video Path</label>
+							<label for="videoPath">Film Path</label>
 						</td>
 						<td>
-							<input id="videoPath" type="url">
-						</td>
-					</tr>
-					<tr>
-						<td>
-							<label for="fileUrl">File URL</label>
-						</td>
-						<td>
-							<input id="fileUrl" type="url">
+							<input id="videoPath" type="url" value="demo/trailer.mp4">
 						</td>
 					</tr>
 					<tr>
 						<td>
-							<label for="delayTime">Delay until film starts (milliseconds)</label>
+							<label for="fileUrl">Trigger File URL</label>
 						</td>
 						<td>
-							<input id="delayTime" type="number" min="5000" value="10000">
+							<input id="fileUrl" type="url" value="https://cinemasense.github.io/server/demo/trailer.csf">
+						</td>
+					</tr>
+					<tr>
+						<td>
+							<label for="startTime">Film Start Time</label>
+						</td>
+						<td>
+							<input id="startTime" type="datetime-local" oninput="checkTime(this);">
+							<span id="warning">Warning: Start time is in the past!</span>
 						</td>
 					</tr>
 				</tbody>
@@ -345,7 +384,7 @@
 			<div>
 				<input type="button" value="Host Film" onclick="startCountdown(false);">
 				<input type="button" value="Download QR Code" onclick="downloadQR();">
-				<input type="button" value="Trade Show" onclick="startCountdown(true);">
+				<input type="button" class="tradeShow" value="Trade Show" onclick="startCountdown(true);">
 			</div>
 		</div>
 		<div id="mainContainer">
