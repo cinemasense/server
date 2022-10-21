@@ -151,11 +151,6 @@
 			videoElem = document.getElementById("video");
 			startTimeElem = document.getElementById("startTime");
 
-			// Set to current time plus 30 seconds
-			const now = new Date();
-			now.setSeconds(now.getSeconds() + 30);
-			startTimeElem.value = now.toLocaleTimeString("en-GB");
-
 			// Spam the local server to get a more accurate offset
 			serverSpammer = window.setInterval(getTimeOffset, 3000);
 			getTimeOffset();
@@ -169,7 +164,13 @@
 			fetch("http://localhost:8888/offset").then(async(request) => {
 				const json = await request.json();
 				timeOffset = json.offset;
-				loadingElem.style.display = "none";
+				if (loadingElem.style.display !== "none") {
+					// Set to current time plus 30 seconds
+					const now = new Date();
+					now.setSeconds(now.getSeconds() + 30, now.getMilliseconds() + timeOffset);
+					startTimeElem.value = now.toLocaleTimeString("en-GB");
+					loadingElem.style.display = "none";
+				}
 			}).catch(err => {
 				loadingElem.textContent = `Error loading time correction: ${err.message}\n\nMake sure the server is hosted correctly.`;
 			});
@@ -204,12 +205,11 @@
 			}
 		}
 
-		function makeQR(qrSize) {
-			// Calculate timing
-			startTime = timeToUTC(startTimeElem.value);
-
-			// Generate QR code
+		function makeQR(startTime, qrSize) {
+			// Clear previous QR code
 			qrDisplay.innerHTML = "";
+
+			// Generate new QR code
 			qrCode = new QRCode(qrDisplay, {
 				text: JSON.stringify({ // Could be shortened to `${fileUrlElem.value} ${startTime}`
 					u: fileUrlElem.value,
@@ -233,7 +233,9 @@
 			qrContainer.style.right = "0";
 
 			videoElem.addEventListener("ended", function() {
-				const delay = makeQR(window.innerHeight * 0.5);
+				// Replay after 30 second delay, similar to setup()
+				startTime = Date.now() + 30000 + timeOffset;
+				const delay = makeQR(startTime, window.innerHeight * 0.5);
 				window.setTimeout(() => videoElem.play(), delay - playLag);
 			});
 		}
@@ -270,7 +272,8 @@
 			window.setTimeout(() => mainContainer.style.opacity = "1", 0);
 
 			// Generate QR code and get server delay
-			const delay = makeQR(window.innerHeight * (tradeShow ? 0.5 : 0.8));
+			startTime = timeToUTC(startTimeElem.value);
+			const delay = makeQR(startTime, window.innerHeight * (tradeShow ? 0.5 : 0.8));
 
 			// Hacky: Measure how long videoElem.play() takes to run
 			window.setTimeout(() => {
@@ -310,7 +313,8 @@
 		}
 
 		function downloadQR() {
-			makeQR(512);
+			startTime = timeToUTC(startTimeElem.value);
+			makeQR(startTime, 512);
 			const link = document.createElement("a");
 			link.download = "QRCode.png";
 			link.href = qrCode._oDrawing._elCanvas.toDataURL("image/png");
