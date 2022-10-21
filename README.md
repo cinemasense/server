@@ -1,4 +1,4 @@
-# Cinema Sense Server
+# CinemaSense Server
 
 ## Setup
 1. Navigate to the server folder using File Explorer.
